@@ -36,6 +36,7 @@ type LongPoll struct {
 	mx    sync.Mutex
 	chmap map[string]*Channel
 	alive int32
+	backend Backend
 	// performance optimisation: channel list cache between updates to avoid reconstructing it
 	// from chmap values and unlocking the thread ASAP. Reset to nil on any alterations to chmap
 	chcache []*Channel
@@ -44,10 +45,16 @@ type LongPoll struct {
 
 // New creates a new long-polling subscription manager.
 func New() *LongPoll {
+	return WithBackend(NewMemoryBackend())
+}
+
+// New creates a new long-polling subscription manager with a given backend.
+func WithBackend(backend Backend) *LongPoll {
 	return &LongPoll{
 		chmap:  make(map[string]*Channel),
 		alive:  yes,
 		logger: slf.WithContext("longpoll"),
+		backend: backend,
 	}
 }
 
@@ -57,7 +64,7 @@ func (lp *LongPoll) Subscribe(timeout time.Duration, topics ...string) (string, 
 	if !lp.IsAlive() {
 		return "", errors.New("pubsub is down")
 	}
-	ch, err := NewChannel(timeout, lp.drop, topics...)
+	ch, err := NewChannel(lp.backend, timeout, lp.drop, topics...)
 	if err == nil {
 		lp.mx.Lock()
 		lp.chcache = nil

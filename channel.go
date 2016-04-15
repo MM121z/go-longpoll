@@ -25,7 +25,7 @@ type Channel struct {
 	id      string
 	onClose func(id string)
 	topics  map[string]bool
-	data    []interface{}
+	backend Backend
 	alive   int32
 	notif   *getnotifier
 	tor     *Timeout
@@ -43,7 +43,7 @@ type getnotifier struct {
 //
 // Constructing a channel with NewChannel starts a timeout timer. The first Get request must
 // follow within the timeout window.
-func NewChannel(timeout time.Duration, onClose func(id string), topics ...string) (*Channel, error) {
+func NewChannel(backend Backend, timeout time.Duration, onClose func(id string), topics ...string) (*Channel, error) {
 	if len(topics) == 0 {
 		return nil, errors.New("at least one topic expected")
 	}
@@ -56,6 +56,7 @@ func NewChannel(timeout time.Duration, onClose func(id string), topics ...string
 		id:      id,
 		onClose: onClose,
 		topics:  make(map[string]bool),
+		backend: backend,
 		alive:   yes,
 		logger:  logger,
 	}
@@ -67,6 +68,8 @@ func NewChannel(timeout time.Duration, onClose func(id string), topics ...string
 	} else {
 		return nil, err
 	}
+	// FIXME error handling
+	backend.Init(id)
 	logger.WithFields(slf.Fields{
 		"id":      ch.id,
 		"topics":  topics,
@@ -78,8 +81,8 @@ func NewChannel(timeout time.Duration, onClose func(id string), topics ...string
 
 // MustNewChannel acts just like NewChannel, however, it does not return
 // errors and panics instead.
-func MustNewChannel(timeout time.Duration, onClose func(id string), topics ...string) *Channel {
-	ch, err := NewChannel(timeout, onClose, topics...)
+func MustNewChannel(backend Backend, timeout time.Duration, onClose func(id string), topics ...string) *Channel {
+	ch, err := NewChannel(backend, timeout, onClose, topics...)
 	if err == nil {
 		return ch
 	}
@@ -103,7 +106,8 @@ func (ch *Channel) Publish(data interface{}, topic string) error {
 
 		// ch could have died between the check above and entering the lock
 		if ch.IsAlive() {
-			ch.data = append(ch.data, data)
+			// FIXME error handling
+			ch.backend.Add(ch.id, data)
 			if ch.notif != nil && !ch.notif.pinged {
 				ch.notif.pinged = true
 				ch.notif.ping <- true
@@ -195,15 +199,14 @@ func (ch *Channel) startLongpollTimer(polltime time.Duration, pollend chan bool,
 	}
 	pollend <- true
 }
-
+// FIXME error handling
 func (ch *Channel) onDataWaiting(resp chan []interface{}) bool {
-	if len(ch.data) > 0 {
+	if count, _ := ch.backend.ContentSize(ch.id); count > 0 {
 		// answer with currently waiting data
-		resp <- ch.data
-		ndata := len(ch.data)
+		data, _:= ch.backend.Drain(ch.id)
+		resp <- data
+		ndata := len(data)
 		ch.logger.WithField("objects", ndata).Debug("sending data to waiting get")
-		// remove data as it is already sent back
-		ch.data = nil
 		// earlier Get should get nothing, this one comes back with data immediately,
 		// thus no get notifier for Publish
 		ch.notif = nil
@@ -216,11 +219,11 @@ func (ch *Channel) onNewDataLocking(resp chan []interface{}, notif *getnotifier)
 	ch.mx.Lock()
 	defer ch.mx.Unlock()
 	// answer with currently waiting data
-	resp <- ch.data
-	ndata := len(ch.data)
+	// FIXME error handling
+	data, _:= ch.backend.Drain(ch.id)
+	resp <- data
+	ndata := len(data)
 	ch.logger.WithField("objects", ndata).Debug("sending data to waiting get")
-	// remove data as it is already sent back
-	ch.data = nil
 	// remove this Get from Publish notification as this Get is already processed
 	if ch.notif == notif {
 		ch.notif = nil
@@ -261,7 +264,8 @@ func (ch *Channel) Drop() {
 		// signal timeout handler to quit
 		ch.tor.Drop()
 		// clear data: no subscription gets anything
-		ch.data = nil
+		// FIXME error handling
+		ch.backend.Drop(ch.id)
 		// let current get know that it should quit (with no data, see above)
 		if ch.notif != nil && !ch.notif.pinged {
 			ch.notif.ping <- true
@@ -293,9 +297,8 @@ func (ch *Channel) Topics() []string {
 // QueueSize returns the size of the currently waiting data queue (only not empty when no Get
 // request waiting).
 func (ch *Channel) QueueSize() int {
-	ch.mx.Lock()
-	res := len(ch.data)
-	ch.mx.Unlock()
+	// FIXME error handling
+	res, _ := ch.backend.ContentSize(ch.id)
 	return res
 }
 

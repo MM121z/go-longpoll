@@ -13,7 +13,7 @@ import (
 func TestChannel_onNewChannel_active(t *testing.T) {
 	timeout := 400 * time.Millisecond
 
-	ch, err := longpoll.NewChannel(timeout, func(id string) {}, "any")
+	ch, err := longpoll.NewChannel(backend, timeout, func(id string) {}, "any")
 	if err != nil {
 		t.Error(err)
 	}
@@ -28,14 +28,14 @@ func TestChannel_onNewChannel_active(t *testing.T) {
 func TestChannel_onMustNewChannel_active(t *testing.T) {
 	timeout := 400 * time.Millisecond
 
-	ch := longpoll.MustNewChannel(timeout, func(id string) {}, "any")
+	ch := longpoll.MustNewChannel(backend, timeout, func(id string) {}, "any")
 	if !ch.IsAlive() {
 		t.Error("channel down on construction")
 	}
 }
 
 func TestChannel_onNewChannel_withZeroTimeout_error(t *testing.T) {
-	_, err := longpoll.NewChannel(0*time.Second, nil, "any")
+	_, err := longpoll.NewChannel(backend, 0*time.Second, nil, "any")
 	if err == nil {
 		t.Errorf("error expected")
 	}
@@ -43,7 +43,7 @@ func TestChannel_onNewChannel_withZeroTimeout_error(t *testing.T) {
 
 func TestChannel_onNewChannel_withEmptyTopics_error(t *testing.T) {
 	var topics []string
-	_, err := longpoll.NewChannel(10*time.Second, nil, topics...)
+	_, err := longpoll.NewChannel(backend, 10*time.Second, nil, topics...)
 	if err == nil {
 		t.Errorf("error expected")
 	}
@@ -56,13 +56,13 @@ func TestChannel_onMustNewChannel_withEmptyTopics_panics(t *testing.T) {
 		}
 	}()
 	var topics []string
-	longpoll.MustNewChannel(10*time.Second, nil, topics...)
+	longpoll.MustNewChannel(backend, 10*time.Second, nil, topics...)
 }
 
 func TestChannel_onDuplicateTopics_uniqued(t *testing.T) {
 	timeout := 400 * time.Millisecond
 
-	ch := longpoll.MustNewChannel(timeout, func(id string) {}, "A", "B", "C", "B", "A")
+	ch := longpoll.MustNewChannel(backend, timeout, func(id string) {}, "A", "B", "C", "B", "A")
 	if len(ch.Topics()) != 3 {
 		t.Error("wrong topics")
 	}
@@ -75,7 +75,7 @@ func TestChannel_onNewChannel_andNoAction_expires(t *testing.T) {
 	start := time.Now()
 	var end time.Time
 
-	ch := longpoll.MustNewChannel(timeout, func(id string) {
+	ch := longpoll.MustNewChannel(backend, timeout, func(id string) {
 		end = time.Now()
 	}, "any")
 	defer ch.Drop()
@@ -106,7 +106,7 @@ func TestChannel_onTimeout_handlerCalledWithCorrectId(t *testing.T) {
 	tolerance := 25 * time.Millisecond
 
 	var idx string
-	ch := longpoll.MustNewChannel(timeout, func(id string) {
+	ch := longpoll.MustNewChannel(backend, timeout, func(id string) {
 		idx = id
 	}, "any")
 	defer ch.Drop()
@@ -121,7 +121,7 @@ func TestChannel_onNoHandler_whenTimeout_success(t *testing.T) {
 	timeout := 400 * time.Millisecond
 	tolerance := 25 * time.Millisecond
 
-	ch := longpoll.MustNewChannel(timeout, nil, "any")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "any")
 	defer ch.Drop()
 
 	time.Sleep(timeout - tolerance)
@@ -141,7 +141,7 @@ func TestChannel_onGetAndNoPublish_expiresGetAndChannel(t *testing.T) {
 	tolerance := 25 * time.Millisecond
 
 	start := time.Now()
-	ch := longpoll.MustNewChannel(timeout, nil, "any")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "any")
 	defer ch.Drop()
 
 	time.Sleep(polltime)
@@ -170,7 +170,7 @@ func TestChannel_onGetAndNoPublish_expiresGetAndChannel(t *testing.T) {
 func TestChannel_onGet_withZeroPollTime_error(t *testing.T) {
 	timeout := 400 * time.Millisecond
 
-	ch := longpoll.MustNewChannel(timeout, nil, "any")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "any")
 	defer ch.Drop()
 
 	_, err := ch.Get(0 * time.Millisecond)
@@ -184,7 +184,7 @@ func TestChannel_onDrop_withGetWaiting_cleanup(t *testing.T) {
 	polltime := 200 * time.Millisecond
 	tolerance := 25 * time.Millisecond
 
-	ch := longpoll.MustNewChannel(timeout, nil, "A", "B")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "A", "B")
 	if ch.QueueSize() != 0 {
 		t.Errorf("unexpected queue size")
 	}
@@ -230,7 +230,7 @@ func TestChannel_onPublishThenGetThenGet_Get1ComesBackImmediately_Get2Expires(t 
 	tolerance := 25 * time.Millisecond
 
 	start := time.Now()
-	ch := longpoll.MustNewChannel(timeout, nil, "A")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "A")
 	defer ch.Drop()
 
 	outdata := pubdata{value: 351}
@@ -273,7 +273,7 @@ func TestChannel_onGetThenPublish_GetComesBackUponPublish(t *testing.T) {
 	tolerance := 25 * time.Millisecond
 
 	start := time.Now()
-	ch := longpoll.MustNewChannel(timeout, nil, "A")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "A")
 	defer ch.Drop()
 
 	datach, _ := ch.Get(polltime)
@@ -301,7 +301,7 @@ func TestChannel_onGetThenGetThenPublish_Get1Expires_andGet2ComesWithData(t *tes
 	tolerance := 25 * time.Millisecond
 
 	start := time.Now()
-	ch := longpoll.MustNewChannel(timeout, nil, "A")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "A")
 	defer ch.Drop()
 
 	datach1, _ := ch.Get(polltime)
@@ -344,7 +344,7 @@ func TestChannel_onNxPublishThenGet_GetReceivesAll(t *testing.T) {
 	tolerance := 25 * time.Millisecond
 
 	start := time.Now()
-	ch := longpoll.MustNewChannel(timeout, nil, "A", "C")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "A", "C")
 	defer ch.Drop()
 
 	outdata1 := pubdata{value: 1}
@@ -384,7 +384,7 @@ func TestChannel_onPublish_withAnyMatchingTopic_GetReceives(t *testing.T) {
 	tolerance := 25 * time.Millisecond
 
 	start := time.Now()
-	ch := longpoll.MustNewChannel(timeout, nil, "A", "B", "C", "D")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "A", "B", "C", "D")
 	defer ch.Drop()
 
 	datach, _ := ch.Get(polltime)
@@ -414,7 +414,7 @@ func TestChannel_onPublish_withNonmatchingTopic_GetIndifferent(t *testing.T) {
 	tolerance := 25 * time.Millisecond
 
 	start := time.Now()
-	ch := longpoll.MustNewChannel(timeout, nil, "A", "B", "C", "D")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "A", "B", "C", "D")
 	defer ch.Drop()
 
 	datach, _ := ch.Get(polltime)
@@ -445,7 +445,7 @@ func TestChannel_onDroppedSub_GetErrors(t *testing.T) {
 	tolerance := 25 * time.Millisecond
 
 	start := time.Now()
-	ch := longpoll.MustNewChannel(timeout, nil, "A", "B", "C")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "A", "B", "C")
 
 	outdata := pubdata{value: 351}
 	ch.Publish(&outdata, "A")
@@ -465,7 +465,7 @@ func TestChannel_onDroppedSub_PublishErrors(t *testing.T) {
 	timeout := 400 * time.Millisecond
 	tolerance := 25 * time.Millisecond
 
-	ch := longpoll.MustNewChannel(timeout, nil, "A", "B", "C")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "A", "B", "C")
 
 	outdata := pubdata{value: 351}
 	ch.Publish(&outdata, "A")
@@ -485,7 +485,7 @@ func TestChannel_onDropRightAfterGet_GetReturnsEmpty(t *testing.T) {
 	tolerance := 25 * time.Millisecond
 
 	start := time.Now()
-	ch := longpoll.MustNewChannel(timeout, nil, "A", "B", "C")
+	ch := longpoll.MustNewChannel(backend, timeout, nil, "A", "B", "C")
 	datach, _ := ch.Get(polltime)
 	ch.Drop()
 	if len(<-datach) > 0 {
