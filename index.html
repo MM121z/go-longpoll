@@ -1,0 +1,223 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>longpoll by ventu-io</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-dark.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>longpoll</h1>
+        <p>PubSub queuing with long-polling subscribers (not bound to HTTP)</p>
+        <p class="view"><a href="https://github.com/ventu-io/go-longpoll">View the Project on GitHub <small>ventu-io/go-longpoll</small></a></p>
+        <ul>
+          <li><a href="https://github.com/ventu-io/go-longpoll/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/ventu-io/go-longpoll/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/ventu-io/go-longpoll">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <p><a href="https://travis-ci.org/ventu-io/go-longpoll"><img src="https://travis-ci.org/ventu-io/go-longpoll.svg?branch=master" alt="Build status"></a> <a href="https://codecov.io/github/ventu-io/go-longpoll?branch=master"><img src="https://codecov.io/github/ventu-io/go-longpoll/coverage.svg?branch=master" alt="Coverage"></a> <a href="http://goreportcard.com/report/ventu-io/go-longpoll"><img src="https://img.shields.io/badge/goreportcard-A%2B-brightgreen.svg" alt="GoReportCard"></a> <a href="https://godoc.org/github.com/ventu-io/go-longpoll"><img src="http://img.shields.io/badge/godoc-reference-blue.svg?style=flat" alt="API documentation"></a></p>
+
+<h1>
+<a id="pubsub-with-long-polling-in-go" class="anchor" href="#pubsub-with-long-polling-in-go" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>PubSub with long polling in Go</h1>
+
+<p>The <a href="https://golang.org">Go</a> library <code>go-longpoll</code> (package <code>longpoll</code>) provides an implementation of the
+long-polling mechanism of the <a href="https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern">PubSub</a> pattern. Although the primary purpose of the
+library is to aid the development of web applications, the library provides no specific web
+handlers and  can be used in other distributed applications.</p>
+
+<p>Long polling is a technique to notify client applications about updates on the server. It is often
+used in writing web application as a substitute for the push technique, however can be used in
+other distributed applications.</p>
+
+<p>Clients initiate subscriptions to the server specifying topics they are interested in. Given a
+subscription Id a client makes a request for new data. The request is held open until data becomes
+available on the server (published to a matching topic). As soon as this happens the request is
+answered immediately. If no data arrives over a predefined time window (the long-polling interval)
+the request returns empty. A new connection is then established between the client and the server
+to receive further updates.</p>
+
+<p>The following points are often listed as the benefits of long-polling over the push mechanism in web
+applications:</p>
+
+<ul>
+<li>does not require a persistent connection to the server</li>
+<li>works for slow clients as they receive information at the speed they can process, although
+maybe in large chunks which are accumulated at the server between requests</li>
+<li>friendly to proxies blocking streaming</li>
+</ul>
+
+<p>The library can be installed by one of the following methods:</p>
+
+<ul>
+<li>
+<p>using <code>go get</code></p>
+
+<pre><code>go get github.com/ventu-io/go-longpoll
+</code></pre>
+</li>
+<li>
+<p>via cloning this repository:</p>
+
+<pre><code>git clone git@github.com:ventu-io/go-longpoll.git ${GOPATH}/src/github.com/ventu-io/go-longpoll
+</code></pre>
+</li>
+</ul>
+
+<h2>
+<a id="implementation-details-and-examples" class="anchor" href="#implementation-details-and-examples" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Implementation details and examples</h2>
+
+<p>The API documentation is available at <a href="https://godoc.org/github.com/ventu-io/go-longpoll">GoDocs</a>. The following demo <a href="https://github.com/go-examples/longpoll">repository</a>
+provides multiple examples and benchmarks for this library.</p>
+
+<p>Subscriptions will timeout and get closed if no client request is received over a given timeout
+interval. Every request resets the timeout counter. The timeout interval is a property of the
+subscription itself and different subscriptions may have different timeout intervals.</p>
+
+<p>The long-polling interval, within which the request is held, is specified per request. Web
+application wrappers might provide defaults.</p>
+
+<p>The library supports concurrent long-polling requests on the same subscription Id, but no data will
+be duplicated across request responses. No specific distribution of data across responses is
+guaranteed: new requests signal the existing one to return immediately.</p>
+
+<p>At the moment the library does not support persisting of published data before it is collected by
+subscribers. All the published data is stored in memory of the backend.</p>
+
+<p><strong>Long-polling with subscription management:</strong></p>
+
+<p>Handling of long-polling subscriptions, publishing and receiving data is done by the
+<code>longpoll.LongPoll</code> type:</p>
+
+<div class="highlight highlight-source-go"><pre><span class="pl-smi">ps</span> <span class="pl-k">:=</span> longpoll.<span class="pl-c1">New</span>()
+<span class="pl-smi">id1</span>, <span class="pl-smi">_</span> <span class="pl-k">:=</span> ps.<span class="pl-c1">Subscribe</span>(time.<span class="pl-smi">Minute</span>, <span class="pl-s"><span class="pl-pds">"</span>TopicA<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>TopicB<span class="pl-pds">"</span></span>)
+<span class="pl-smi">id2</span>, <span class="pl-smi">_</span> <span class="pl-k">:=</span> ps.<span class="pl-c1">Subscribe</span>(time.<span class="pl-smi">Minute</span>, <span class="pl-s"><span class="pl-pds">"</span>TopicB<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>TopicC<span class="pl-pds">"</span></span>)
+
+<span class="pl-k">go</span> <span class="pl-k">func</span>() {
+    <span class="pl-k">for</span> {
+        <span class="pl-k">if</span> <span class="pl-smi">datach</span>, <span class="pl-smi">err</span> <span class="pl-k">:=</span> ps.<span class="pl-c1">Get</span>(id1, <span class="pl-c1">30</span>*time.<span class="pl-smi">Second</span>); err == <span class="pl-c1">nil</span> {
+            fmt.<span class="pl-c1">Printf</span>(<span class="pl-s"><span class="pl-pds">"</span><span class="pl-c1">%v</span> received <span class="pl-c1">%v</span><span class="pl-pds">"</span></span>, id1, <span class="pl-k">&lt;-</span>datach)
+        } <span class="pl-k">else</span> {
+            <span class="pl-k">break</span>
+        }
+    }
+}()
+
+<span class="pl-k">go</span> <span class="pl-k">func</span>() {
+    <span class="pl-k">for</span> {
+        <span class="pl-k">if</span> <span class="pl-smi">datach</span>, <span class="pl-smi">err</span> <span class="pl-k">:=</span> ps.<span class="pl-c1">Get</span>(id2, <span class="pl-c1">20</span>*time.<span class="pl-smi">Second</span>); err == <span class="pl-c1">nil</span> {
+            fmt.<span class="pl-c1">Printf</span>(<span class="pl-s"><span class="pl-pds">"</span><span class="pl-c1">%v</span> received <span class="pl-c1">%v</span><span class="pl-pds">"</span></span>, id2, <span class="pl-k">&lt;-</span>datach)
+        } <span class="pl-k">else</span> {
+            <span class="pl-k">break</span>
+        }
+    }
+}()
+
+<span class="pl-k">for</span> {
+    <span class="pl-c">// data published on TopicB will be received by id1 and id2, TopicC by id2 only</span>
+    ps.<span class="pl-c1">Publish</span>({<span class="pl-s"><span class="pl-pds">"</span>random<span class="pl-pds">"</span></span>: rand.<span class="pl-c1">Float64</span>()}, <span class="pl-s"><span class="pl-pds">"</span>TopicB<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>TopicC<span class="pl-pds">"</span></span>)
+
+    <span class="pl-c">// sleep for up to 50s</span>
+    time.<span class="pl-c1">Sleep</span>(time.<span class="pl-c1">Duration</span>(rand.<span class="pl-c1">Intn</span>(<span class="pl-c1">5e10</span>)))
+}</pre></div>
+
+<p>A comprehensive example can be run from the demo <a href="https://github.com/go-examples/longpoll">repository</a> via</p>
+
+<pre><code>./longpoll 1
+</code></pre>
+
+<p><strong>Long-polling on a single subscription channel:</strong></p>
+
+<p>Handling of the single-channel long-polling pubsub is done by the <code>longpoll.Sub</code> type:</p>
+
+<div class="highlight highlight-source-go"><pre><span class="pl-smi">ch</span> <span class="pl-k">:=</span> longpoll.<span class="pl-c1">MustNewChannel</span>(time.<span class="pl-smi">Minute</span>, <span class="pl-c1">func</span> (id <span class="pl-k">string</span>) {
+    <span class="pl-c">// action on exit</span>
+}, <span class="pl-s"><span class="pl-pds">"</span>TopicA<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>TopicB<span class="pl-pds">"</span></span>)
+
+<span class="pl-k">go</span> <span class="pl-k">func</span>() {
+    <span class="pl-k">for</span> {
+        <span class="pl-k">if</span> <span class="pl-smi">datach</span>, <span class="pl-smi">err</span> <span class="pl-k">:=</span> ch.<span class="pl-c1">Get</span>(<span class="pl-c1">20</span>*time.<span class="pl-smi">Second</span>); err == <span class="pl-c1">nil</span> {
+            fmt.<span class="pl-c1">Printf</span>(<span class="pl-s"><span class="pl-pds">"</span>received <span class="pl-c1">%v</span><span class="pl-pds">"</span></span>, <span class="pl-k">&lt;-</span>datach)
+        } <span class="pl-k">else</span> {
+            <span class="pl-k">break</span>
+        }
+    }
+}()
+
+<span class="pl-k">for</span> {
+    ch.<span class="pl-c1">Publish</span>({<span class="pl-s"><span class="pl-pds">"</span>random<span class="pl-pds">"</span></span>: rand.<span class="pl-c1">Float64</span>()}, <span class="pl-s"><span class="pl-pds">"</span>TopicB<span class="pl-pds">"</span></span>)
+    <span class="pl-c">// above subscription will not receive this data</span>
+    ch.<span class="pl-c1">Publish</span>({<span class="pl-s"><span class="pl-pds">"</span>random<span class="pl-pds">"</span></span>: rand.<span class="pl-c1">Float64</span>()}, <span class="pl-s"><span class="pl-pds">"</span>TopicC<span class="pl-pds">"</span></span>)
+
+    <span class="pl-c">// sleep for up to 50s</span>
+    time.<span class="pl-c1">Sleep</span>(time.<span class="pl-c1">Duration</span>(rand.<span class="pl-c1">Intn</span>(<span class="pl-c1">5e10</span>)))
+}</pre></div>
+
+<p>A comprehensive example can be run from the demo <a href="https://github.com/go-examples/longpoll">repository</a> via</p>
+
+<pre><code>./longpoll 2
+</code></pre>
+
+<h2>
+<a id="performance" class="anchor" href="#performance" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Performance</h2>
+
+<p>Using a benchmark from the demo <a href="https://github.com/go-examples/longpoll">repository</a> a throughput test can be run using the
+command below.</p>
+
+<p>Measured on conventional hardware using a benchmark in the demo <a href="https://github.com/go-examples/longpoll">repository</a>, the
+implemented algorithm publisheds and concurrently receives 1 million units of data on average over
+880ms:</p>
+
+<pre><code>./longpoll 4
+</code></pre>
+
+<h2>
+<a id="changelog" class="anchor" href="#changelog" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Changelog</h2>
+
+<h4>
+<a id="current-master" class="anchor" href="#current-master" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>current master</h4>
+
+<ul>
+<li>Switched to <a href="https://github.com/ventu-io/slf">https://github.com/ventu-io/slf</a> (structured logging facade)
+for logging (no logging output until an SLF configuration is applied by 
+an application using the library).</li>
+<li>Incoming get will terminate any pending one for the same subscription 
+immediately (if issued concurrently).</li>
+<li>Using <a href="https://github.com/ventu-io/go-shortid">https://github.com/ventu-io/go-shortid</a> instead of UUID.v4.</li>
+</ul>
+
+<h4>
+<a id="31-dec-2015-version-10" class="anchor" href="#31-dec-2015-version-10" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>31 Dec 2015: Version 1.0</h4>
+
+<ul>
+<li>
+<a href="https://github.com/ventu-io/go-longpoll/releases/tag/v1.0">First release</a> of the API</li>
+</ul>
+
+<h2>
+<a id="license" class="anchor" href="#license" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>License</h2>
+
+<p>Copyright (c) 2015-2016 Ventu.io, Oleg Sklyar, contributors.</p>
+
+<p>Distributed under a MIT style license found in the <a href="https://github.com/ventu-io/go-longpoll/blob/master/LICENSE">LICENSE</a> file.</p>
+      </section>
+    </div>
+    <footer>
+      <p>Project maintained by <a href="https://github.com/ventu-io">ventu-io</a></p>
+      <p>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></p>
+    </footer>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+    
+  </body>
+</html>
